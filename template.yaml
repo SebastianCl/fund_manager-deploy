@@ -24,17 +24,16 @@ Resources:
           # Instalar aws-cli
           yum install -y aws-cli
           # Obtener las variables de entorno desde Parameter Store
-          export VERSION=$(aws ssm get-parameter --name "/fundmanager/VERSION" --query "Parameter.Value" --output text --region us-east-2)
-          export GMAIL_FROM_EMAIL=$(aws ssm get-parameter --name "/fundmanager/GMAIL_FROM_EMAIL" --query "Parameter.Value" --output text --region us-east-2)
-          export GMAIL_EMAIL_PASSWORD=$(aws ssm get-parameter --name "/fundmanager/GMAIL_EMAIL_PASSWORD" --with-decryption --query "Parameter.Value" --output text --region us-east-2)
-          export GMAIL_SMTP_SERVER=$(aws ssm get-parameter --name "/fundmanager/GMAIL_SMTP_SERVER" --query "Parameter.Value" --output text --region us-east-2)
-          export GMAIL_SMTP_PORT=$(aws ssm get-parameter --name "/fundmanager/GMAIL_SMTP_PORT" --query "Parameter.Value" --output text --region us-east-2)
-          export TWILIO_ACCOUNT_SID=$(aws ssm get-parameter --name "/fundmanager/TWILIO_ACCOUNT_SID" --query "Parameter.Value" --output text --region us-east-2)
-          export TWILIO_AUTH_TOKEN=$(aws ssm get-parameter --name "/fundmanager/TWILIO_AUTH_TOKEN" --with-decryption --query "Parameter.Value" --output text --region us-east-2)
-          export TWILIO_PHONE=$(aws ssm get-parameter --name "/fundmanager/TWILIO_PHONE" --query "Parameter.Value" --output text --region us-east-2)
-          export aws_access_key_id=$(aws ssm get-parameter --name "/fundmanager/aws_access_key_id" --query "Parameter.Value" --output text --region us-east-2)
-          export aws_secret_access_key=$(aws ssm get-parameter --name "/fundmanager/aws_secret_access_key" --with-decryption --query "Parameter.Value" --output text --region us-east-2)
-          export region_name=$(aws ssm get-parameter --name "/fundmanager/region_name" --query "Parameter.Value" --output text --region us-east-2)
+          VARIABLES=(VERSION GMAIL_FROM_EMAIL GMAIL_EMAIL_PASSWORD GMAIL_SMTP_SERVER GMAIL_SMTP_PORT TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_PHONE aws_access_key_id aws_secret_access_key region_name)
+          ENV_FILE="/home/ec2-user/.env"
+          touch $ENV_FILE
+          # Obtener cada variable de Parameter Store y agregarla al archivo .env
+          for VAR in "${VARIABLES[@]}"
+          do
+              VALUE=$(aws ssm get-parameter --name "$VAR" --with-decryption --query "Parameter.Value" --output text --region ${AWS::Region})
+              echo "$VAR=$VALUE" >> $ENV_FILE
+          done
+          echo "Archivo .env creado con éxito en /home/ec2-user/.env"
           # Clonar el repositorio y ejecutar la aplicación
           git clone https://github.com/SebastianCl/fund_manager-back.git
           cd fund_manager-back
@@ -58,7 +57,7 @@ Resources:
   DynamoDBTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: MyTable
+      TableName: MyTable2
       AttributeDefinitions:
         - AttributeName: id
           AttributeType: S
@@ -69,23 +68,3 @@ Resources:
         ReadCapacityUnits: 5
         WriteCapacityUnits: 5
 
-  FrontendS3Bucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: my-react-frontend-bucket
-      WebsiteConfiguration:
-        IndexDocument: index.html
-        ErrorDocument: error.html
-
-  FrontendBucketPolicy:
-    Type: AWS::S3::BucketPolicy
-    Properties:
-      Bucket: !Ref FrontendS3Bucket
-      PolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Sid: PublicReadGetObject
-            Effect: Allow
-            Principal: "*"
-            Action: s3:GetObject
-            Resource: !Sub "arn:aws:s3:::my-react-frontend-bucket/*"
