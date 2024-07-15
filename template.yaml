@@ -1,0 +1,91 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Despliegue de prueba tecnica
+
+Resources:
+  BackendEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      KeyName: fund-manager
+      ImageId: ami-0a91cd140a1fc148a
+      SecurityGroupIds:
+        - !Ref BackendSecurityGroup
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          yum update -y
+          yum install -y python3 git
+          amazon-linux-extras install docker -y
+          service docker start
+          usermod -a -G docker ec2-user
+          curl -sSL https://get.docker.com/ | sh
+          systemctl start docker
+          systemctl enable docker
+          # Instalar aws-cli
+          yum install -y aws-cli
+          # Obtener las variables de entorno desde Parameter Store
+          export VERSION=$(aws ssm get-parameter --name "/fundmanager/VERSION" --query "Parameter.Value" --output text --region us-east-2)
+          export GMAIL_FROM_EMAIL=$(aws ssm get-parameter --name "/fundmanager/GMAIL_FROM_EMAIL" --query "Parameter.Value" --output text --region us-east-2)
+          export GMAIL_EMAIL_PASSWORD=$(aws ssm get-parameter --name "/fundmanager/GMAIL_EMAIL_PASSWORD" --with-decryption --query "Parameter.Value" --output text --region us-east-2)
+          export GMAIL_SMTP_SERVER=$(aws ssm get-parameter --name "/fundmanager/GMAIL_SMTP_SERVER" --query "Parameter.Value" --output text --region us-east-2)
+          export GMAIL_SMTP_PORT=$(aws ssm get-parameter --name "/fundmanager/GMAIL_SMTP_PORT" --query "Parameter.Value" --output text --region us-east-2)
+          export TWILIO_ACCOUNT_SID=$(aws ssm get-parameter --name "/fundmanager/TWILIO_ACCOUNT_SID" --query "Parameter.Value" --output text --region us-east-2)
+          export TWILIO_AUTH_TOKEN=$(aws ssm get-parameter --name "/fundmanager/TWILIO_AUTH_TOKEN" --with-decryption --query "Parameter.Value" --output text --region us-east-2)
+          export TWILIO_PHONE=$(aws ssm get-parameter --name "/fundmanager/TWILIO_PHONE" --query "Parameter.Value" --output text --region us-east-2)
+          export aws_access_key_id=$(aws ssm get-parameter --name "/fundmanager/aws_access_key_id" --query "Parameter.Value" --output text --region us-east-2)
+          export aws_secret_access_key=$(aws ssm get-parameter --name "/fundmanager/aws_secret_access_key" --with-decryption --query "Parameter.Value" --output text --region us-east-2)
+          export region_name=$(aws ssm get-parameter --name "/fundmanager/region_name" --query "Parameter.Value" --output text --region us-east-2)
+          # Clonar el repositorio y ejecutar la aplicación
+          git clone https://github.com/SebastianCl/fund_manager-back.git
+          cd fund_manager-back
+          pip3 install -r requirements.txt
+          uvicorn main:app --host 0.0.0.0 --port 80
+
+  BackendSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Permitir acceso HTTP y SSH
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+  DynamoDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: MyTable
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+
+  FrontendS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: my-react-frontend-bucket
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: error.html
+
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendS3Bucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: "*"
+            Action: s3:GetObject
+            Resource: !Sub "arn:aws:s3:::my-react-frontend-bucket/*"
