@@ -10,35 +10,75 @@ Resources:
       ImageId: ami-0a91cd140a1fc148a
       SecurityGroupIds:
         - !Ref BackendSecurityGroup
+      IamInstanceProfile: !Ref EC2InstanceProfile
       UserData:
-        Fn::Base64: !Sub |
-          #!/bin/bash
-          yum update -y
-          yum install -y python3 git
-          amazon-linux-extras install docker -y
-          service docker start
-          usermod -a -G docker ec2-user
-          curl -sSL https://get.docker.com/ | sh
-          systemctl start docker
-          systemctl enable docker
-          # Instalar aws-cli
-          yum install -y aws-cli
-          # Obtener las variables de entorno desde Parameter Store
-          VARIABLES=(VERSION GMAIL_FROM_EMAIL GMAIL_EMAIL_PASSWORD GMAIL_SMTP_SERVER GMAIL_SMTP_PORT TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_PHONE aws_access_key_id aws_secret_access_key region_name)
-          ENV_FILE="/home/ec2-user/.env"
-          touch $ENV_FILE
-          # Obtener cada variable de Parameter Store y agregarla al archivo .env
-          for VAR in "${VARIABLES[@]}"
-          do
-              VALUE=$(aws ssm get-parameter --name "$VAR" --with-decryption --query "Parameter.Value" --output text --region ${AWS::Region})
-              echo "$VAR=$VALUE" >> $ENV_FILE
-          done
-          echo "Archivo .env creado con éxito en /home/ec2-user/.env"
-          # Clonar el repositorio y ejecutar la aplicación
-          git clone https://github.com/SebastianCl/fund_manager-back.git
-          cd fund_manager-back
-          pip3 install -r requirements.txt
-          uvicorn main:app --host 0.0.0.0 --port 80
+        Fn::Base64: !Join
+          - ''
+          - - "#!/bin/bash\n"
+            - "yum update -y\n"
+            - "yum install -y python3 git\n"
+            - "amazon-linux-extras install docker -y\n"
+            - "service docker start\n"
+            - "usermod -a -G docker ec2-user\n"
+            - "curl -sSL https://get.docker.com/ | sh\n"
+            - "systemctl start docker\n"
+            - "systemctl enable docker\n"
+            - "# Instalar aws-cli\n"
+            - "yum install -y aws-cli\n"
+            - "# Obtener las variables de entorno desde Parameter Store\n"
+            - "VARIABLES=(VERSION GMAIL_FROM_EMAIL GMAIL_EMAIL_PASSWORD GMAIL_SMTP_SERVER GMAIL_SMTP_PORT TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_PHONE aws_access_key_id aws_secret_access_key region_name)\n"
+            - "ENV_FILE=\"/home/ec2-user/.env\"\n"
+            - "touch $ENV_FILE\n"
+            - "# Obtener cada variable de Parameter Store y agregarla al archivo .env\n"
+            - "for VAR in \"${VARIABLES[@]}\"\n"
+            - "do\n"
+            - "  VALUE=$(aws ssm get-parameter --name \"$VAR\" --with-decryption --query \"Parameter.Value\" --output text --region "
+            - !Ref "AWS::Region"
+            - ")\n"
+            - "  echo \"$VAR=$VALUE\" >> $ENV_FILE\n"
+            - "done\n"
+            - "echo \"Archivo .env creado con éxito en /home/ec2-user/.env\"\n"
+            - "# Clonar el repositorio y ejecutar la aplicación\n"
+            - "git clone https://github.com/SebastianCl/fund_manager-back.git\n"
+            - "cd fund_manager-back\n"
+            - "pip3 install -r requirements.txt\n"
+            - "uvicorn main:app --host 0.0.0.0 --port 80\n"
+
+  EC2InstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Roles:
+        - !Ref EC2Role
+
+  EC2Role:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Policies:
+        - PolicyName: 'ParameterStoreAccess'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'ssm:GetParameter'
+                Resource: 'arn:aws:ssm:*:*:parameter/*'
+        - PolicyName: 'S3FullAccess'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:*'
+                Resource: '*'
 
   BackendSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -55,46 +95,46 @@ Resources:
           CidrIp: 0.0.0.0/0
 
   DynamoDBTableTransaction:
-      Type: AWS::DynamoDB::Table
-      Properties:
-        TableName: transaction
-        AttributeDefinitions:
-          - AttributeName: transaction_id
-            AttributeType: S
-        KeySchema:
-          - AttributeName: transaction_id
-            KeyType: HASH
-        ProvisionedThroughput:
-          ReadCapacityUnits: 5
-          WriteCapacityUnits: 5
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: transaction
+      AttributeDefinitions:
+        - AttributeName: transaction_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: transaction_id
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
 
-    DynamoDBTableUser:
-      Type: AWS::DynamoDB::Table
-      Properties:
-        TableName: user
-        AttributeDefinitions:
-          - AttributeName: user_id
-            AttributeType: N
-        KeySchema:
-          - AttributeName: user_id
-            KeyType: HASH
-        ProvisionedThroughput:
-          ReadCapacityUnits: 5
-          WriteCapacityUnits: 5
+  DynamoDBTableUser:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: user
+      AttributeDefinitions:
+        - AttributeName: user_id
+          AttributeType: N
+      KeySchema:
+        - AttributeName: user_id
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
 
-    DynamoDBTableFund:
-      Type: AWS::DynamoDB::Table
-      Properties:
-        TableName: fund
-        AttributeDefinitions:
-          - AttributeName: fund_id
-            AttributeType: N
-        KeySchema:
-          - AttributeName: fund_id
-            KeyType: HASH
-        ProvisionedThroughput:
-          ReadCapacityUnits: 5
-          WriteCapacityUnits: 5
+  DynamoDBTableFund:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: fund
+      AttributeDefinitions:
+        - AttributeName: fund_id
+          AttributeType: N
+      KeySchema:
+        - AttributeName: fund_id
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
 
   FrontendS3Bucket:
     Type: AWS::S3::Bucket
