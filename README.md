@@ -85,6 +85,6 @@ aws cloudformation validate-template --template-body file://template.yaml
 
 Crear stack
 ```sh
-aws cloudformation create-stack --template-body file://template.yaml --capabilities
-CAPABILITY_NAMED_IAM --region us-east-2 --stack-name fundmanager-stack
+aws cloudformation create-stack --template-body file://template.yaml --capabilities CAPABILITY_IAM --capabilities CAPABILITY_NAMED_IAM --region us-east-2 --parameters ParameterKey=CreateDynamoDBTables,ParameterValue=false --stack-name fundmanager-stack
+
 ```

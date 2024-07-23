@@ -1,8 +1,20 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Despliegue de prueba tecnica
+Description: Despliegue de Fund Manager
+
+Parameters:
+  CreateDynamoDBTables:
+    Type: String
+    Description: "Especifica si se deben crear las tablas de DynamoDB (true) o si ya existen (false)"
+    AllowedValues:
+      - "true"
+      - "false"
+    Default: "true"
+
+Conditions:
+  CreateTablesCondition: !Equals [!Ref CreateDynamoDBTables, "true"]
 
 Resources:
-  BackendEC2Instance:
+  FundManagerBackendInstance:
     Type: AWS::EC2::Instance
     Properties:
       InstanceType: t2.micro
@@ -25,6 +37,9 @@ Resources:
             - "systemctl enable docker\n"
             - "# Instalar aws-cli\n"
             - "yum install -y aws-cli\n"
+            - "# Clonar el repositorio\n"
+            - "git clone https://github.com/SebastianCl/fund_manager-back.git\n"
+            - "cd fund_manager-back\n"
             - "# Obtener las variables de entorno desde Parameter Store\n"
             - "VARIABLES=(VERSION GMAIL_FROM_EMAIL GMAIL_EMAIL_PASSWORD GMAIL_SMTP_SERVER GMAIL_SMTP_PORT TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_PHONE aws_access_key_id aws_secret_access_key region_name)\n"
             - "ENV_FILE=\"/home/ec2-user/.env\"\n"
@@ -38,9 +53,7 @@ Resources:
             - "  echo \"$VAR=$VALUE\" >> $ENV_FILE\n"
             - "done\n"
             - "echo \"Archivo .env creado con éxito en /home/ec2-user/.env\"\n"
-            - "# Clonar el repositorio y ejecutar la aplicación\n"
-            - "git clone https://github.com/SebastianCl/fund_manager-back.git\n"
-            - "cd fund_manager-back\n"
+            - "# Ejecutar la aplicación\n"
             - "pip3 install -r requirements.txt\n"
             - "uvicorn main:app --host 0.0.0.0 --port 80\n"
 
@@ -93,9 +106,16 @@ Resources:
           FromPort: 80
           ToPort: 80
           CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          CidrIp: 0.0.0.0/0
 
   DynamoDBTableTransaction:
     Type: AWS::DynamoDB::Table
+    Condition: CreateTablesCondition
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Retain
     Properties:
       TableName: transaction
       AttributeDefinitions:
@@ -110,6 +130,9 @@ Resources:
 
   DynamoDBTableUser:
     Type: AWS::DynamoDB::Table
+    Condition: CreateTablesCondition
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Retain
     Properties:
       TableName: user
       AttributeDefinitions:
@@ -124,6 +147,9 @@ Resources:
 
   DynamoDBTableFund:
     Type: AWS::DynamoDB::Table
+    Condition: CreateTablesCondition
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Retain
     Properties:
       TableName: fund
       AttributeDefinitions:
@@ -142,7 +168,6 @@ Resources:
       BucketName: fund-manager-front
       WebsiteConfiguration:
         IndexDocument: index.html
-        ErrorDocument: error.html
 
   FrontendBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -155,4 +180,4 @@ Resources:
             Effect: Allow
             Principal: "*"
             Action: s3:GetObject
-            Resource: !Sub "arn:aws:s3:::fund-manager-front/*"
+            Resource: "arn:aws:s3:::fund-manager-front/*"
