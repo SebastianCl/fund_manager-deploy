@@ -84,7 +84,7 @@ aws cloudformation validate-template --template-body file://template.yaml
 ```
 
 Crear stack
-```sh
-aws cloudformation create-stack --template-body file://template.yaml --capabilities CAPABILITY_IAM --capabilities CAPABILITY_NAMED_IAM --region us-east-2 --parameters ParameterKey=CreateDynamoDBTables,ParameterValue=false --stack-name fundmanager-stack
 
+```sh
+aws cloudformation create-stack --template-body file://master.yml --capabilities CAPABILITY_IAM --capabilities CAPABILITY_NAMED_IAM --region us-east-1 --parameters ParameterKey=CreateDynamoDBTables,ParameterValue=true ParameterKey=DynamoTableName,ParameterValue=mitabla ParameterKey=DynamoTableKey,ParameterValue=myllave ParameterKey=BucketName,ParameterValue=mibucket3435 --stack-name fundmanager-stack
 ```

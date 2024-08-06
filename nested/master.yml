@@ -1,0 +1,66 @@
+AWSTemplateFormatVersion: 2010-09-09
+Metadata:
+    AWS::CloudFormation::Interface:
+        ParameterGroups:
+            -
+                Label:
+                    default: 'Base de Datos DynamoDB'
+                Parameters:
+                    - DynamoTableName
+                    - DynamoTableKey
+                    - CreateDynamoDBTables
+            -
+                Label:
+                    default: 'Bucket S3'
+                Parameters:
+                    - BucketName
+        ParameterLabels:
+            DynamoTableName:
+                default: 'Ingrese el nombre de la tabla'
+            DynamoTableKey:
+                default: 'Ingrese el nombre de la llave'
+            CreateDynamoDBTables:
+                default: 'Ingrese si se debe crear la base de datos'
+            BucketName:
+                default: 'Ingrese el nombre del bucket'
+
+Parameters:
+    DynamoTableName:
+        Description: Nombre de la tabla
+        Type: String
+    DynamoTableKey:
+        Description: Llave de la tabla
+        Type: String
+    CreateDynamoDBTables:
+        Type: String
+        Description: 'Especifica si se deben crear las tablas de DynamoDB (true) o si ya existen (false)'
+        AllowedValues:
+            - 'true'
+            - 'false'
+        Default: 'true'
+    BucketName:
+        Description: Bucket
+        Type: String
+
+Conditions:
+    CreateTablesCondition: !Equals [!Ref CreateDynamoDBTables, 'true']
+
+Resources:
+    dynamo:
+        Type: 'AWS::CloudFormation::Stack'
+        Condition: CreateTablesCondition
+        DeletionPolicy: Delete
+        UpdateReplacePolicy: Retain
+        Properties:
+            TemplateURL: https://sebastian3435.s3.us-east-1.amazonaws.com/dynamo.yml
+            Parameters:
+                DynamoTableName: !Ref DynamoTableName
+                DynamoTableKey: !Ref DynamoTableKey
+    bucket:
+        Type: 'AWS::CloudFormation::Stack'
+        DeletionPolicy: Delete
+        UpdateReplacePolicy: Retain
+        Properties:
+            TemplateURL: https://sebastian3435.s3.us-east-1.amazonaws.com/bucket.yml
+            Parameters:
+                BucketName: !Ref BucketName
